@@ -24,6 +24,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 // ----------------------------------------------------------------------------
+
+// Integration with CodeMirror
+
+
+// TODO: callback: replaceWith  has to be checked for compatibility
+// TODO: all references to textarea must be updated with editor
+// TODO: remove all browers specific bug, these bug should be handled by editor
+// TODO: Find out what scroll position is , might need to deprecate it
+// TODO: what is abort?
+// TODO: Limit line width
+// TODO: Test for I18N
+// TODO: Limit line width 
+// TODO: Clean() and Preview()
+// TODO: Sync with original textarea
+// TODO: Upgrade a editor option to markitup option
+// DEMO: long sentence without space, long sentance with space ( demon re-ording) 
+// 
+
 (function($) {
 	$.fn.markItUp = function(settings, extraSettings) {
 		var options, ctrlKey, shiftKey, altKey;
@@ -60,8 +78,21 @@
 		}
 
 		return this.each(function() {
-			var $$, textarea, levels, scrollPosition, caretPosition, caretOffset,
-				clicked, hash, header, footer, previewWindow, template, iFrame, abort;
+			var $$; 
+			var textarea;
+			var levels;
+			var scrollPosition;
+			var caretPosition;
+			var caretOffset;
+			var	clicked;
+			var hash;
+			var header;
+			var footer;
+			var previewWindow;
+			var template;
+			var iFrame;
+			var abort;
+			var editor;
 			$$ = $(this);
 			textarea = this;
 			levels = [];
@@ -123,10 +154,16 @@
 					footer.append(resizeHandle);
 				}
 
-				// listen key events
-				$$.keydown(keyPressed).keyup(keyPressed);
+				editor = CodeMirror.fromTextArea('markItUp', {
+    				parserfile: "parsexml.js",
+				    stylesheet: "codemirror/css/xmlcolors.css",
+				    path: "codemirror/js/",
+				    continuousScanning: 500
+				 });
+				// listen key events : CodeMirror
+				// beaware of grab key
 				
-				// bind an event to catch external calls
+				// bind an event to catch external calls : CodeMirror
 				$$.bind("insertion", function(e, settings) {
 					if (settings.target !== false) {
 						get();
@@ -136,10 +173,11 @@
 					}
 				});
 
-				// remember the last focus
+				// remember the last focus : CodeMirror
 				$$.focus(function() {
 					$.markItUp.focused = this;
 				});
+
 			}
 
 			// recursively build header with dropMenus from markupset
@@ -190,7 +228,8 @@
 				return ul;
 			}
 
-			// markItUp! markups
+			// markItUp! markups, do-ing some string replacements
+			// split the string in to two, the returned string depends on "alt-key" or "prompt" result
 			function magicMarkups(string) {
 				if (string) {
 					string = string.toString();
@@ -211,7 +250,7 @@
 							if (abort === true) {
 								return false;
 							}
-							value = prompt(b[0], (b[1]) ? b[1] : '');
+							value = prompt(b[0], (b[1]) ? b[1] : ''); // prompt might not be working in some browser
 							if (value === null) {
 								abort = true;
 							}
@@ -223,7 +262,8 @@
 				return "";
 			}
 
-			// prepare action
+			// prepare action - if action is a method, execute it, if not, do some string replacement
+			// @closureO(hash)
 			function prepare(action) {
 				if ($.isFunction(action)) {
 					action = action(hash);
@@ -232,22 +272,18 @@
 			}
 
 			// build block to insert
+			//@closureO : clicked (button)
 			function build(string) {
-				var openWith 	= prepare(clicked.openWith);
-				var placeHolder = prepare(clicked.placeHolder);
-				var replaceWith = prepare(clicked.replaceWith);
-				var closeWith 	= prepare(clicked.closeWith);
+				openWith 	= prepare(clicked.openWith);  
+				placeHolder = prepare(clicked.placeHolder); 
+				replaceWith = prepare(clicked.replaceWith);
+				closeWith 	= prepare(clicked.closeWith);
 				if (replaceWith !== "") {
 					block = openWith + replaceWith + closeWith;
 				} else if (selection === '' && placeHolder !== '') {
 					block = openWith + placeHolder + closeWith;
 				} else {
-					string = string || selection;						
-					if (string.match(/ $/)) {
-						block = openWith + string.replace(/ $/, '') + closeWith + ' ';
-					} else {
-						block = openWith + string + closeWith;
-					}
+					block = openWith + (string||selection) + closeWith;
 				}
 				return {	block:block, 
 							openWith:openWith, 
@@ -258,6 +294,14 @@
 			}
 
 			// define markup to insert
+			//@closureO: textarea
+			//@closureO: selection
+			//@closureO: caretPosition
+			//@closureO: ctrlKey
+			//@closureO: shiftKey
+			//@closureO: altKey
+			//@closureO: options
+			//@closureN: editor
 			function markup(button) {
 				var len, j, n, i;
 				hash = clicked = button;
@@ -274,8 +318,8 @@
 								}
 							);
 				// callbacks before insertion
-				prepare(options.beforeInsert);
-				prepare(clicked.beforeInsert);
+				prepare(options.beforeInsert); 
+				prepare(clicked.beforeInsert); 
 				if (ctrlKey === true && shiftKey === true) {
 					prepare(clicked.beforeMultiInsert);
 				}			
@@ -293,32 +337,34 @@
 					}
 					string = { block:lines.join('\n')};
 					start = caretPosition;
-					len = string.block.length + (($.browser.opera) ? n-1 : 0);
+					len = string.block.length + (($.browser.opera) ? n-1 : 0); // : CodeMirror Opera ?
 				} else if (ctrlKey === true) {
 					string = build(selection);
 					start = caretPosition + string.openWith.length;
 					len = string.block.length - string.openWith.length - string.closeWith.length;
-					len = len - (string.block.match(/ $/) ? 1 : 0);
 					len -= fixIeBug(string.block);
 				} else if (shiftKey === true) {
 					string = build(selection);
 					start = caretPosition;
 					len = string.block.length;
 					len -= fixIeBug(string.block);
-				} else {
+				} 
+				else // : CodeMirror no key is pressed
+				{
 					string = build(selection);
 					start = caretPosition + string.block.length ;
 					len = 0;
-					start -= fixIeBug(string.block);
+// 					start -= fixIeBug(string.block); // @deleted
 				}
+				// When nothing is selectied
 				if ((selection === '' && string.replaceWith === '')) {
-					caretOffset += fixOperaBug(string.block);
+//					caretOffset += fixOperaBug(string.block); // @deleted
 					
 					start = caretPosition + string.openWith.length;
 					len = string.block.length - string.openWith.length - string.closeWith.length;
 
-					caretOffset = $$.val().substring(caretPosition,  $$.val().length).length;
-					caretOffset -= fixOperaBug($$.val().substring(0, caretPosition));
+					caretOffset = editor.getCode().substring(caretPosition,  editor.getCode().length).length;
+//					caretOffset -= fixOperaBug($$.val().substring(0, caretPosition)); // @deleted
 				}
 				$.extend(hash, { caretPosition:caretPosition, scrollPosition:scrollPosition } );
 
@@ -364,57 +410,56 @@
 			}
 				
 			// add markup
+			//@closure: textarea
+			//@closure: editor
 			function insert(block) {	
-				if (document.selection) {
-					var newSelection = document.selection.createRange();
-					newSelection.text = block;
-				} else {
-					textarea.value =  textarea.value.substring(0, caretPosition)  + block + textarea.value.substring(caretPosition + selection.length, textarea.value.length);
-				}
+//				if (document.selection) {
+//					var newSelection = document.selection.createRange();
+//					newSelection.text = block;
+//				} else {
+//					textarea.value =  textarea.value.substring(0, caretPosition)  + block + textarea.value.substring(caretPosition + selection.length, textarea.value.length);
+//				}
+				editor.replaceSelection(block);
 			}
 
-			// set a selection
+			// set a selection, reselect after replace
+			//@deprecated as the editor.replaceSelection() did the job already
+			//@closure editor
+			//@closure textarea
 			function set(start, len) {
-				if (textarea.createTextRange){
-					// quick fix to make it work on Opera 9.5
-					if ($.browser.opera && $.browser.version >= 9.5 && len == 0) {
-						return false;
-					}
-					range = textarea.createTextRange();
-					range.collapse(true);
-					range.moveStart('character', start); 
-					range.moveEnd('character', len); 
-					range.select();
-				} else if (textarea.setSelectionRange ){
-					textarea.setSelectionRange(start, start + len);
-				}
-				textarea.scrollTop = scrollPosition;
-				textarea.focus();
 			}
 
-			// get the selection
+			// get the selection, and update the states like "selection"
+			// @closureO: selection
+			// @closureO: scrollPosition
+			// @closureO: caretPosition
+			// @closureN: editor 
 			function get() {
-				textarea.focus();
-
-				scrollPosition = textarea.scrollTop;
-				if (document.selection) {
-					selection = document.selection;	
-					if ($.browser.msie) { // ie	
-						var range = selection.createRange();
-						var stored_range = range.duplicate();
-						stored_range.moveToElementText(textarea);
-						stored_range.setEndPoint('EndToEnd', range);
-						var s = stored_range.text.length - range.text.length;
-	
-						caretPosition = s - (textarea.value.substr(0, s).length - textarea.value.substr(0, s).replace(/\r/g, '').length);
-						selection = range.text;
-					} else { // opera
-						caretPosition = textarea.selectionStart;
-					}
-				} else { // gecko & webkit
-					caretPosition = textarea.selectionStart;
-					selection = textarea.value.substring(caretPosition, textarea.selectionEnd);
-				} 
+//				textarea.focus();
+				selection = editor.selection();
+				caretPosition = editor.cursorPosition();
+//				scrollPosition = textarea.scrollTop;
+//				// doucument.selection might be a IE object, CodeMirror
+//				if (document.selection) {
+//					selection = document.selection;	
+//					if ($.browser.msie) { // ie	
+//						var range = selection.createRange();
+//						var stored_range = range.duplicate();
+//						stored_range.moveToElementText(textarea);
+//						stored_range.setEndPoint('EndToEnd', range);
+//						var s = stored_range.text.length - range.text.length;
+//	
+//						caretPosition = s - (textarea.value.substr(0, s).length - textarea.value.substr(0, s).replace(/\r/g, '').length);
+//						selection = range.text;
+//					} else { // opera
+//						caretPosition = textarea.selectionStart;
+//					}
+//				} 
+//				else
+//				{ // gecko & webkit , firefox and sarfari : CodeMirror
+//					caretPosition = textarea.selectionStart; 
+//					selection = textarea.value.substring(caretPosition, textarea.selectionEnd);
+//				} 
 				return selection;
 			}
 
@@ -459,26 +504,22 @@
 			function renderPreview() {		
 				var phtml;
 				if (options.previewParserPath !== '') {
-					$.ajax({
+					$.ajax( {
 						type: 'POST',
-						dataType: 'text',
-						global: false,
 						url: options.previewParserPath,
 						data: options.previewParserVar+'='+encodeURIComponent($$.val()),
 						success: function(data) {
 							writeInPreview( localize(data, 1) ); 
 						}
-					});
+					} );
 				} else {
 					if (!template) {
-						$.ajax({
+						$.ajax( {
 							url: options.previewTemplatePath,
-							dataType: 'text',
-							global: false,
 							success: function(data) {
 								writeInPreview( localize(data, 1).replace(/<!-- content -->/g, $$.val()) );
 							}
-						});
+						} );
 					}
 				}
 				return false;
@@ -499,6 +540,7 @@
 			}
 			
 			// set keys pressed
+			// TODO : Integration with editor.grabkeys()
 			function keyPressed(e) { 
 				shiftKey = e.shiftKey;
 				altKey = e.altKey;
